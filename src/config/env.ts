@@ -53,8 +53,8 @@ export const config = {
     port: parseInteger(process.env.DB_PORT, 5432),
     database: process.env.DB_NAME || 'leadership_assessment',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '',
-    ssl: process.env.DB_SSL === 'true',
+    password: String(process.env.DB_PASSWORD ?? ''),
+    ssl: parseBoolean(process.env.DB_SSL, false),
     statementTimeout: parseInteger(process.env.DB_STATEMENT_TIMEOUT, 10000),
   },
   

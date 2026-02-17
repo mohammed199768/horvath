@@ -7,20 +7,46 @@ import { Pool, PoolClient, QueryResult } from 'pg';
 import { config } from './env';
 import { logger } from '../utils/logger';
 
-export const pool = new Pool({
-  host: config.database.host,
-  port: config.database.port,
-  database: config.database.database,
-  user: config.database.user,
-  password: config.database.password,
-  ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
+const databaseUrl = process.env.DATABASE_URL;
+
+const getDatabaseUrlSslConfig = (url: string): { rejectUnauthorized: false } | false => {
+  const normalizedUrl = url.toLowerCase();
+
+  if (normalizedUrl.includes('railway.net')) {
+    return { rejectUnauthorized: false };
+  }
+
+  if (normalizedUrl.includes('localhost') || normalizedUrl.includes('127.0.0.1')) {
+    return false;
+  }
+
+  return false;
+};
+
+const sharedPoolConfig = {
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 3000,
   ...(config.database.statementTimeout
     ? { options: `--statement_timeout=${config.database.statementTimeout}` }
     : {}),
-});
+};
+
+export const pool = databaseUrl
+  ? new Pool({
+      connectionString: databaseUrl,
+      ssl: getDatabaseUrlSslConfig(databaseUrl),
+      ...sharedPoolConfig,
+    })
+  : new Pool({
+      host: config.database.host,
+      port: config.database.port,
+      database: config.database.database,
+      user: config.database.user,
+      password: String(config.database.password),
+      ssl: config.database.ssl ? { rejectUnauthorized: false } : false,
+      ...sharedPoolConfig,
+    });
 
 pool.on('connect', () => {
   logger.info('Database connected successfully');

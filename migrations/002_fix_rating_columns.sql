@@ -1,4 +1,4 @@
-﻿-- Migration: Normalize topic_responses rating columns safely (non-destructive)
+-- Migration: Normalize topic_responses rating columns safely (non-destructive)
 BEGIN;
 
 ALTER TABLE topic_responses

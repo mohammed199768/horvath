@@ -1,0 +1,54 @@
+# ============================================
+# ENVIRONMENT & SECRETS — never upload
+# ============================================
+.env
+.env.local
+.env.production
+.env.staging
+
+# ============================================
+# BUILD OUTPUT — generated automatically
+# ============================================
+dist/
+build/
+
+# ============================================
+# DEPENDENCIES — installed via npm install
+# ============================================
+node_modules/
+
+# ============================================
+# LOGS — generated at runtime
+# ============================================
+*.log
+dev-server.out.log
+dev-server.err.log
+error.log
+
+# ============================================
+# DEBUG & TEST OUTPUT FILES
+# ============================================
+debug-output.json
+test-api.ps1
+
+# ============================================
+# SENSITIVE OPS SCRIPTS
+# ============================================
+_ops/
+
+# ============================================
+# DATA FILES — not part of source code
+# ============================================
+narrative.json
+questions.json
+recommendations.json
+
+# ============================================
+# OS & EDITOR JUNK
+# ============================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -63,33 +63,6 @@ router.post('/start', async (req, res, next) => {
   try {
     const validated = startResponseSchema.parse(req.body);
 
-    const assessmentCheck = await query(
-      `SELECT id
-       FROM assessments
-       WHERE id = $1
-         AND is_active = true
-         AND is_published = true
-       LIMIT 1`,
-      [validated.assessmentId]
-    );
-
-    if (assessmentCheck.rows.length === 0) {
-      const latestActive = await query(
-        `SELECT id
-         FROM assessments
-         WHERE is_active = true
-           AND is_published = true
-         ORDER BY published_at DESC NULLS LAST, created_at DESC
-         LIMIT 1`
-      );
-
-      return res.status(409).json({
-        success: false,
-        error: 'Assessment is no longer available. Please refresh and try again.',
-        latestAssessmentId: latestActive.rows[0]?.id ?? null,
-      });
-    }
-
     const participantCheck = await query(
       `SELECT id
        FROM participants
@@ -105,30 +78,58 @@ router.post('/start', async (req, res, next) => {
       });
     }
 
-    const topicCountResult = await query(
-      `SELECT COUNT(*) as total FROM topics t 
-       JOIN dimensions d ON t.dimension_id = d.id 
-       WHERE d.assessment_id = $1`,
-      [validated.assessmentId]
-    );
-
-    const totalQuestions = parseInt(topicCountResult.rows[0].total);
     const sessionToken = crypto.randomBytes(32).toString('hex');
 
     const result = await query(
-      `INSERT INTO assessment_responses 
-        (assessment_id, participant_id, total_questions, session_token, ip_address, user_agent, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'in_progress')
-       RETURNING id, session_token, status`,
+      `WITH selected_assessment AS (
+         SELECT id
+         FROM assessments
+         WHERE id = $1
+           AND is_active = true
+           AND is_published = true
+         LIMIT 1
+       ),
+       topic_count AS (
+         SELECT COUNT(*)::int AS total_questions
+         FROM topics t
+         JOIN dimensions d ON t.dimension_id = d.id
+         JOIN selected_assessment sa ON sa.id = d.assessment_id
+       ),
+       inserted AS (
+         INSERT INTO assessment_responses
+           (assessment_id, participant_id, total_questions, session_token, ip_address, user_agent, status)
+         SELECT sa.id, $2, tc.total_questions, $3, $4, $5, 'in_progress'
+         FROM selected_assessment sa
+         CROSS JOIN topic_count tc
+         RETURNING id, session_token, status
+       )
+       SELECT id, session_token, status
+       FROM inserted`,
       [
-        validated.assessmentId, 
-        validated.participantId, 
-        totalQuestions, 
-        sessionToken, 
-        req.ip, 
+        validated.assessmentId,
+        validated.participantId,
+        sessionToken,
+        req.ip,
         req.get('User-Agent')
       ]
     );
+
+    if (result.rows.length === 0) {
+      const latestActive = await query(
+        `SELECT id
+         FROM assessments
+         WHERE is_active = true
+           AND is_published = true
+         ORDER BY published_at DESC NULLS LAST, created_at DESC
+         LIMIT 1`
+      );
+
+      return res.status(409).json({
+        success: false,
+        error: 'Assessment is no longer available. Please refresh and try again.',
+        latestAssessmentId: latestActive.rows[0]?.id ?? null,
+      });
+    }
 
     res.status(201).json({
       success: true,

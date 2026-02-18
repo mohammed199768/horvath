@@ -53,6 +53,11 @@ const normalizeSqlForTransaction = (sql: string): string => {
   return filtered.join('\n');
 };
 
+const requiresNonTransactionalRun = (sql: string): boolean => {
+  const upper = sql.toUpperCase();
+  return upper.includes('@NO-TRANSACTION') || upper.includes('CREATE INDEX CONCURRENTLY');
+};
+
 const resolveMigrationConstructor = (moduleExports: Record<string, unknown>): MigrationConstructor => {
   for (const exportedValue of Object.values(moduleExports)) {
     if (typeof exportedValue !== 'function') {
@@ -104,13 +109,18 @@ export const applyMigrations = async (migrationsDir: string = __dirname): Promis
         continue;
       }
 
-      await client.query('BEGIN');
-      try {
-        const migrationPath = path.join(migrationsDir, filename);
+      const isSqlMigration = filename.toLowerCase().endsWith('.sql');
+      const migrationPath = path.join(migrationsDir, filename);
+      const rawSql = isSqlMigration ? fs.readFileSync(migrationPath, 'utf-8') : null;
+      const runWithoutTransaction = rawSql ? requiresNonTransactionalRun(rawSql) : false;
 
-        if (filename.toLowerCase().endsWith('.sql')) {
-          const sql = fs.readFileSync(migrationPath, 'utf-8');
-          const normalizedSql = normalizeSqlForTransaction(sql);
+      if (!runWithoutTransaction) {
+        await client.query('BEGIN');
+      }
+
+      try {
+        if (isSqlMigration) {
+          const normalizedSql = normalizeSqlForTransaction(rawSql ?? '');
           await client.query(normalizedSql);
         } else {
           await runTypeScriptMigration(migrationsDir, filename, {
@@ -119,10 +129,14 @@ export const applyMigrations = async (migrationsDir: string = __dirname): Promis
         }
 
         await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [filename]);
-        await client.query('COMMIT');
+        if (!runWithoutTransaction) {
+          await client.query('COMMIT');
+        }
         logger.info(`Applied migration: ${filename}`);
       } catch (error) {
-        await client.query('ROLLBACK');
+        if (!runWithoutTransaction) {
+          await client.query('ROLLBACK');
+        }
         throw error;
       }
     }

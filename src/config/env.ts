@@ -71,5 +71,8 @@ export const config = {
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     credentials: true,
+    // 24h balances performance (fewer preflights) against slower propagation of CORS policy changes.
+    // Complexity rationale: cache preflight to collapse repeated OPTIONS from O(n) to O(1) per maxAge window.
+    maxAge: 86_400,
   },
 };

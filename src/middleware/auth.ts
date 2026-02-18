@@ -21,6 +21,22 @@ export interface AuthRequest extends Request {
   authToken?: string;
 }
 
+const LAST_ACTIVITY_UPDATE_INTERVAL_MS = 60_000;
+
+const toTimestampMs = (value: unknown): number | null => {
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  return null;
+};
+
 const getCookieValue = (cookieHeader: string | undefined, name: string): string | null => {
   if (!cookieHeader) return null;
 
@@ -82,11 +98,24 @@ export const authenticateAdmin = async (
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
-    // Update last activity
-    await query(
-      'UPDATE admin_sessions SET last_activity_at = NOW() WHERE token = $1',
-      [token]
-    );
+    const nowMs = Date.now();
+    const lastActivityMs = toTimestampMs(session.last_activity_at);
+    const shouldUpdateLastActivity =
+      lastActivityMs === null || nowMs - lastActivityMs >= LAST_ACTIVITY_UPDATE_INTERVAL_MS;
+
+    if (shouldUpdateLastActivity) {
+      // Complexity rationale: write is throttled to O(1) per 60s window; auth read remains O(1) per request.
+      await query(
+        'UPDATE admin_sessions SET last_activity_at = NOW() WHERE id = $1',
+        [session.id]
+      );
+      logger.debug('Auth session activity update: UPDATED', { sessionId: session.id });
+    } else {
+      logger.debug('Auth session activity update: SKIPPED', {
+        sessionId: session.id,
+        elapsedMs: lastActivityMs === null ? null : nowMs - lastActivityMs,
+      });
+    }
 
     req.user = {
       userId: session.user_id,

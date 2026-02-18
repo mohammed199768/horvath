@@ -11,6 +11,37 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validation';
 
 const router = Router();
+const STATS_CACHE_TTL_MS = 30_000;
+
+type DashboardStatsPayload = {
+  overview: unknown;
+  recentActivity: unknown[];
+  topDimensions: unknown[];
+  bottomDimensions: unknown[];
+  industryStats: unknown[];
+  recentCompletions: unknown[];
+};
+
+const statsCache = new Map<string, { data: DashboardStatsPayload; expiresAt: number }>();
+
+const getCachedStats = (key: string): DashboardStatsPayload | null => {
+  const entry = statsCache.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    statsCache.delete(key);
+    return null;
+  }
+
+  return entry.data;
+};
+
+const setCachedStats = (key: string, data: DashboardStatsPayload, ttlMs = STATS_CACHE_TTL_MS): void => {
+  // Complexity rationale: O(1) cache read/write avoids repeated O(n*m) aggregation within TTL windows.
+  statsCache.set(key, { data, expiresAt: Date.now() + ttlMs });
+};
 
 const statsQuerySchema = z.object({
   query: z.object({
@@ -21,6 +52,13 @@ const statsQuerySchema = z.object({
 router.get('/stats', authenticateAdmin, requireRole('admin'), validate(statsQuerySchema), async (req, res, next) => {
   try {
     const { range } = req.query as unknown as z.infer<typeof statsQuerySchema>['query'];
+    const cacheKey = `dashboard_stats:${range}`;
+    const cached = getCachedStats(cacheKey);
+
+    if (cached) {
+      res.setHeader('x-cache', 'HIT');
+      return res.json(cached);
+    }
 
     const stats = await query(
       `
@@ -206,14 +244,18 @@ router.get('/stats', authenticateAdmin, requireRole('admin'), validate(statsQuer
       [range]
     );
 
-    res.json({
+    const payload: DashboardStatsPayload = {
       overview: stats.rows[0].overview,
       recentActivity: stats.rows[0].recent_activity || [],
       topDimensions: stats.rows[0].top_dimensions || [],
       bottomDimensions: stats.rows[0].bottom_dimensions || [],
       industryStats: stats.rows[0].industry_stats || [],
       recentCompletions: stats.rows[0].recent_completions || [],
-    });
+    };
+
+    setCachedStats(cacheKey, payload);
+    res.setHeader('x-cache', 'MISS');
+    res.json(payload);
   } catch (error) {
     next(error);
   }

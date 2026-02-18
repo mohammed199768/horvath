@@ -63,6 +63,48 @@ router.post('/start', async (req, res, next) => {
   try {
     const validated = startResponseSchema.parse(req.body);
 
+    const assessmentCheck = await query(
+      `SELECT id
+       FROM assessments
+       WHERE id = $1
+         AND is_active = true
+         AND is_published = true
+       LIMIT 1`,
+      [validated.assessmentId]
+    );
+
+    if (assessmentCheck.rows.length === 0) {
+      const latestActive = await query(
+        `SELECT id
+         FROM assessments
+         WHERE is_active = true
+           AND is_published = true
+         ORDER BY published_at DESC NULLS LAST, created_at DESC
+         LIMIT 1`
+      );
+
+      return res.status(409).json({
+        success: false,
+        error: 'Assessment is no longer available. Please refresh and try again.',
+        latestAssessmentId: latestActive.rows[0]?.id ?? null,
+      });
+    }
+
+    const participantCheck = await query(
+      `SELECT id
+       FROM participants
+       WHERE id = $1
+       LIMIT 1`,
+      [validated.participantId]
+    );
+
+    if (participantCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Participant not found. Please register again.',
+      });
+    }
+
     const topicCountResult = await query(
       `SELECT COUNT(*) as total FROM topics t 
        JOIN dimensions d ON t.dimension_id = d.id 

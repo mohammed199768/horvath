@@ -19,6 +19,7 @@ import publicRoutes from './routes/public';
 import adminRoutes from './routes/admin';
 
 const app: Application = express();
+app.set('trust proxy', 1);
 const MIGRATIONS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
   filename TEXT PRIMARY KEY,

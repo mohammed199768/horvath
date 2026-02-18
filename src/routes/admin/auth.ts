@@ -13,19 +13,30 @@ import { csrfProtection } from '../../middleware/csrf';
 const router = Router();
 const ADMIN_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+const resolveSameSite = (): 'strict' | 'lax' | 'none' => {
+  const raw = (process.env.COOKIE_SAMESITE || '').toLowerCase();
+  if (raw === 'strict' || raw === 'lax' || raw === 'none') {
+    return raw;
+  }
+  return config.nodeEnv === 'production' ? 'none' : 'lax';
+};
+
+const resolveCookieSecurity = (sameSite: 'strict' | 'lax' | 'none'): boolean =>
+  config.nodeEnv === 'production' || sameSite === 'none';
+
 const buildCookieOptions = () => ({
+  sameSite: resolveSameSite(),
+  secure: resolveCookieSecurity(resolveSameSite()),
   httpOnly: true,
-  secure: config.nodeEnv === 'production',
-  sameSite: 'strict' as const,
   path: '/',
   maxAge: ADMIN_COOKIE_MAX_AGE_MS,
   ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
 });
 
 const buildClearCookieOptions = () => ({
+  sameSite: resolveSameSite(),
+  secure: resolveCookieSecurity(resolveSameSite()),
   httpOnly: true,
-  secure: config.nodeEnv === 'production',
-  sameSite: 'strict' as const,
   path: '/',
   ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
 });

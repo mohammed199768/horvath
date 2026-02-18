@@ -5,6 +5,17 @@ const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 const CSRF_TOKEN_BYTES = 32;
 
+const resolveSameSite = (): 'strict' | 'lax' | 'none' => {
+  const raw = (process.env.COOKIE_SAMESITE || '').toLowerCase();
+  if (raw === 'strict' || raw === 'lax' || raw === 'none') {
+    return raw;
+  }
+  return process.env.NODE_ENV === 'production' ? 'none' : 'lax';
+};
+
+const resolveCookieSecurity = (sameSite: 'strict' | 'lax' | 'none'): boolean =>
+  process.env.NODE_ENV === 'production' || sameSite === 'none';
+
 const isSafeMethod = (method: string): boolean => ['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
 
 const readCookie = (req: Request, key: string): string | undefined => {
@@ -28,13 +39,15 @@ const readCookie = (req: Request, key: string): string | undefined => {
 
 export const issueCsrfToken = (req: Request, res: Response): void => {
   const token = crypto.randomBytes(CSRF_TOKEN_BYTES).toString('hex');
+  const sameSite = resolveSameSite();
 
   res.cookie(CSRF_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: resolveCookieSecurity(sameSite),
+    sameSite,
     path: '/',
     maxAge: 24 * 60 * 60 * 1000,
+    ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
   });
 
   res.json({ csrfToken: token });

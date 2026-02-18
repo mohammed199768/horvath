@@ -38,36 +38,25 @@ router.post('/', async (req, res, next) => {
 
     // Check if participant exists
     const existingCheck = await query(
-      'SELECT id, email, full_name, company_name FROM participants WHERE email = $1',
+      'SELECT id, email, full_name, company_name, participant_token FROM participants WHERE email = $1',
       [validated.email]
     );
 
     if (existingCheck.rows.length > 0) {
       const existing = existingCheck.rows[0];
-      const participantToken = req.header('x-participant-token');
-      if (!participantToken) {
-        return res.status(403).json({ success: false, error: 'Forbidden' });
-      }
 
-      const tokenValidation = await query(
-        `SELECT id
-         FROM participants
-         WHERE id = $1
-           AND participant_token = $2`,
-        [existing.id, participantToken]
-      );
-
-      if (tokenValidation.rows.length === 0) {
-        return res.status(403).json({ success: false, error: 'Forbidden' });
-      }
+      const tokenToUse =
+        typeof existing.participant_token === 'string' && existing.participant_token.length > 0
+          ? existing.participant_token
+          : crypto.randomBytes(32).toString('hex');
       
       // Update existing participant info to capture latest details
       await query(
         `UPDATE participants 
          SET full_name = $1, company_name = $2, job_title = $3, 
              industry = $4, phone = $5, company_size = $6, 
-             country = $7, updated_at = NOW()
-         WHERE id = $8`,
+             country = $7, participant_token = $8, updated_at = NOW()
+         WHERE id = $9`,
         [
           validated.fullName,
           validated.companyName || null,
@@ -76,6 +65,7 @@ router.post('/', async (req, res, next) => {
           validated.phone || null,
           validated.companySize || null,
           validated.country || null,
+          tokenToUse,
           existing.id,
         ]
       );
@@ -86,6 +76,7 @@ router.post('/', async (req, res, next) => {
           participantId: existing.id,
           email: existing.email,
           fullName: validated.fullName,
+          participantToken: tokenToUse,
           message: 'Participant updated successfully',
         },
       });

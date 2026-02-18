@@ -43,7 +43,9 @@ const listMigrationFiles = (migrationsDir: string): string[] => {
 };
 
 const normalizeSqlForTransaction = (sql: string): string => {
-  const lines = sql.split(/\r?\n/);
+  // Guard against UTF-8 BOM at the beginning of SQL files.
+  const sanitizedSql = sql.charCodeAt(0) === 0xfeff ? sql.slice(1) : sql;
+  const lines = sanitizedSql.split(/\r?\n/);
   const filtered = lines.filter((line) => {
     const trimmed = line.trim().toUpperCase();
     return trimmed !== 'BEGIN;' && trimmed !== 'COMMIT;';

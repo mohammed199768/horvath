@@ -8,6 +8,7 @@ import analyticsRoutes from './analytics';
 import recommendationsRoutes from './recommendations';
 import topicLevelsRouter from './topic-levels';
 import topicRecsRouter from './topic-recommendations';
+import participantsRouter from './participants';
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/assessments/import', importRouter);
 router.use('/assessments', assessmentsRoutes);
 router.use('/responses', responsesRoutes);
+router.use('/participants', participantsRouter);
 router.use('/analytics', analyticsRoutes);
 router.use('/recommendations', recommendationsRoutes);
 router.use('/topics', topicLevelsRouter);

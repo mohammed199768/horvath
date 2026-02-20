@@ -101,7 +101,18 @@ router.post('/start', async (req, res, next) => {
          SELECT sa.id, $2, tc.total_questions, $3, $4, $5, 'in_progress'
          FROM selected_assessment sa
          CROSS JOIN topic_count tc
-         RETURNING id, session_token, status
+         RETURNING id, session_token, status, assessment_id, participant_id
+       ),
+       abandoned_previous AS (
+         UPDATE assessment_responses ar
+         SET status = 'abandoned',
+             last_updated_at = NOW()
+         FROM inserted i
+         WHERE ar.participant_id = i.participant_id
+           AND ar.assessment_id = i.assessment_id
+           AND ar.status = 'in_progress'
+           AND ar.id <> i.id
+         RETURNING ar.id
        )
        SELECT id, session_token, status
        FROM inserted`,

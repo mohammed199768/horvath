@@ -79,6 +79,26 @@ router.post('/start', async (req, res, next) => {
     }
 
     const sessionToken = crypto.randomBytes(32).toString('hex');
+    const existingSession = await query(
+      `SELECT id, session_token 
+   FROM assessment_responses 
+   WHERE participant_id = $1 
+     AND assessment_id = $2 
+     AND status = 'in_progress'
+   ORDER BY created_at DESC
+   LIMIT 1`,
+      [validated.participantId, validated.assessmentId]
+    );
+
+    if (existingSession.rows.length > 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          responseId: existingSession.rows[0].id,
+          sessionToken: existingSession.rows[0].session_token,
+        }
+      });
+    }
 
     const result = await query(
       `WITH selected_assessment AS (

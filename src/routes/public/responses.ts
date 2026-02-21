@@ -85,7 +85,6 @@ router.post('/start', async (req, res, next) => {
    WHERE participant_id = $1 
      AND assessment_id = $2 
      AND status = 'in_progress'
-   ORDER BY created_at DESC
    LIMIT 1`,
       [validated.participantId, validated.assessmentId]
     );
